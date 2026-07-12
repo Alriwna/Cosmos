@@ -1,0 +1,319 @@
+/* ─── Redirect Portal: Fullscreen scroll-reveal 3D letter page ─────────── */
+
+.redirect-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+
+/* Full-screen 3D canvas background */
+.portal-canvas-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1001;
+  background: var(--bg-dark);
+}
+
+/* Scanline overlay */
+.scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.15) 50%
+  );
+  background-size: 100% 4px;
+  z-index: 1004;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* Scrollable content on top of the canvas */
+.portal-scroll-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1003;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+/* ─── Intro Section ─────────────────────────────────────────────────────── */
+.portal-intro-section {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  padding: 2rem;
+}
+
+.portal-back-btn {
+  position: fixed;
+  top: 1.5rem;
+  left: 2rem;
+  z-index: 1005;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-tech);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(7, 7, 10, 0.5);
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.portal-back-btn:hover {
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+}
+
+.back-arrow {
+  font-size: 1.2rem;
+  transition: transform 0.3s ease;
+}
+
+.portal-back-btn:hover .back-arrow {
+  transform: translateX(-4px);
+}
+
+.portal-intro-content {
+  text-align: center;
+  max-width: 600px;
+  animation: portalFadeIn 1s ease forwards;
+}
+
+@keyframes portalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.portal-section-tag {
+  display: inline-block;
+  padding: 0.4rem 1.2rem;
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.25);
+  border-radius: 50px;
+  color: var(--accent-cyan);
+  font-family: var(--font-tech);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 1.5rem;
+}
+
+.portal-section-title {
+  font-family: var(--font-tech);
+  font-size: clamp(3rem, 8vw, 6rem);
+  font-weight: 700;
+  line-height: 1.1;
+  background: linear-gradient(135deg, #ffffff 30%, var(--accent-cyan) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+  text-shadow: none;
+}
+
+.portal-section-tagline {
+  color: var(--color-text-secondary);
+  font-size: 1.15rem;
+  line-height: 1.6;
+  margin-bottom: 3rem;
+}
+
+/* Scroll hint */
+.scroll-hint-portal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  animation: portalFadeIn 1.5s ease 0.5s forwards;
+  opacity: 0;
+}
+
+.scroll-hint-portal span {
+  color: rgba(0, 229, 255, 0.6);
+  font-family: var(--font-tech);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+.scroll-arrow-container {
+  width: 24px;
+  height: 40px;
+  border: 2px solid rgba(0, 229, 255, 0.3);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  padding-top: 6px;
+}
+
+.scroll-arrow {
+  color: var(--accent-cyan);
+  font-size: 0.9rem;
+  animation: scrollBounce 2s infinite;
+}
+
+@keyframes scrollBounce {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(10px); opacity: 0.3; }
+}
+
+/* ─── Scroll spacer for particle assembly ───────────────────────────────── */
+.portal-scroll-spacer {
+  height: 200vh;
+  pointer-events: none;
+}
+
+/* ─── Assembled Section (bottom) ────────────────────────────────────────── */
+.portal-assembled-section {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  gap: 2.5rem;
+}
+
+/* Progress indicator */
+.portal-progress-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.progress-ring-small {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.progress-ring-small svg {
+  transform: rotate(-90deg);
+}
+
+.progress-number {
+  position: absolute;
+  font-family: var(--font-tech);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.progress-label {
+  font-family: var(--font-tech);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+/* Info cards */
+.portal-info-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  max-width: 700px;
+  width: 100%;
+}
+
+.portal-info-card {
+  text-align: center;
+  padding: 2rem;
+}
+
+.info-card-icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.portal-info-card h3 {
+  font-family: var(--font-tech);
+  font-size: 1.1rem;
+  color: #fff;
+  margin-bottom: 0.8rem;
+}
+
+.portal-info-card p {
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* Return button */
+.portal-return-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 2.5rem;
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid var(--accent-cyan);
+  border-radius: 8px;
+  font-family: var(--font-tech);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+}
+
+.portal-return-btn:hover {
+  background: var(--accent-cyan);
+  color: #000;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+}
+
+/* ─── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .portal-section-title {
+    font-size: clamp(2.5rem, 12vw, 4rem);
+  }
+
+  .portal-info-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-back-btn {
+    top: 1rem;
+    left: 1rem;
+    font-size: 0.8rem;
+    padding: 0.5rem 1rem;
+  }
+}
