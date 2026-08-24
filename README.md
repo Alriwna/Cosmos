@@ -17,4 +17,3 @@ If you are developing a production application, we recommend using TypeScript wi
 
 
 
-VISIT THE LINK :-https://cosmos.42web.io/?i=1
