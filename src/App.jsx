@@ -82,11 +82,20 @@ function App() {
             </a>
           </li>
           <li>
+            <a href="#bugarena" onClick={(e) => { e.preventDefault(); setRedirectTarget('bugarena'); }}>
+              Bug Arena
+            </a>
+          </li>
+          <li>
             <a href="#learning" onClick={(e) => { e.preventDefault(); setRedirectTarget('learning'); }}>
               Learning
             </a>
           </li>
         </ul>
+        <button className="nav-family-btn" onClick={() => setRedirectTarget('family')}>
+          <img src={nexusLogo} alt="Nexus Logo" />
+          <span>Meet the Nexus Family</span>
+        </button>
       </nav>
 
       {/* HTML Content Scroller */}
@@ -102,39 +111,6 @@ function App() {
           display: 'block',
           overflow: 'hidden',
         }}>
-          {/* Mouse-to-center hint */}
-          <div style={{
-            position: 'absolute',
-            bottom: '2.5rem',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '0.5rem',
-            zIndex: 20,
-            animation: 'fadeInUp 1.4s ease 0.6s forwards',
-            opacity: 0,
-            pointerEvents: 'none',
-          }}>
-            <span style={{
-              color: 'rgba(0,229,255,0.7)',
-              fontSize: '0.78rem',
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              fontFamily: 'var(--font-tech)',
-              textShadow: '0 0 12px rgba(0,229,255,0.5)',
-            }}>
-              Move cursor to centre
-            </span>
-            <div style={{
-              width: 1,
-              height: 36,
-              background: 'linear-gradient(to bottom, rgba(0,229,255,0.7), transparent)',
-              borderRadius: 2,
-            }} />
-          </div>
-
           <Canvas
             camera={{ position: [0, 0, 5], fov: 50 }}
             style={{ background: 'transparent', width: '100%', height: '100%' }}
@@ -147,13 +123,6 @@ function App() {
             <NexusParticles />
           </Canvas>
         </section>
-
-        <footer>
-          <p style={{ textTransform: 'capitalize' }}>© {new Date().getFullYear()} Nexus Technical Club. Built onchain &amp; in the nexus.</p>
-          <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--color-text-dim)' }}>
-            All systems nominal. Prepared for launch.
-          </p>
-        </footer>
       </div>
 
       {/* Redirect Portal Overlay */}
