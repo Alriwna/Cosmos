@@ -976,13 +976,13 @@
 
 /* Card Layout */
 .family-card-new {
-  background: rgba(13, 14, 21, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  padding: 1.6rem;
+  background: rgba(10, 11, 18, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  padding: 1.5rem !important;  /* Override glass-card's 2.5rem - prevents extra padding on all cards */
   display: flex;
   flex-direction: column;
-  gap: 1.2rem;
+  gap: 1.1rem;
   opacity: 0;
   transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), 
               transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
@@ -1442,6 +1442,8 @@
   display: flex !important;
   flex-wrap: wrap;
   gap: 0.6rem;
+  align-items: flex-start !important;
+  align-content: flex-start !important;
 }
 
 .modal-skill-tag {

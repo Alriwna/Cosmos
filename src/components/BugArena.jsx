@@ -356,6 +356,7 @@ const BugArena = ({ onAbort }) => {
     { id: 1, lineNumber: '', description: '', fix: '' }
   ]);
   const [reportGenerated, setReportGenerated] = useState(null);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
   const [toast, setToast] = useState(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [typedText, setTypedText] = useState('');
@@ -632,6 +633,9 @@ const BugArena = ({ onAbort }) => {
     }).catch(() => {
       showToast('Bug report generated!');
     });
+
+    // Lock submission after report is generated
+    setReportSubmitted(true);
   };
 
   // ── Automated Bug Matcher Algorithm ──
@@ -743,7 +747,7 @@ const BugArena = ({ onAbort }) => {
                 Go to Exchange Portal
               </button>
               <button
-                className="ba-neon-btn ba-btn-sm"
+                className="ba-neon-btn ba-btn-sm ba-btn-yellow"
                 onClick={() => setSubmittedKey('')}
               >
                 ✏️ Edit Code
@@ -763,7 +767,7 @@ const BugArena = ({ onAbort }) => {
                 <span className="ba-editor-dot-y" />
                 <span className="ba-editor-dot-g" />
               </div>
-              <div className="ba-report-header-title" style={{ color: '#ff6b6b' }}>
+              <div className="ba-report-header-title" style={{ color: '#00ffff' }}>
                 🐛 Register Hidden Bug Details ({createdBugs.length} Bug{createdBugs.length > 1 ? 's' : ''})
               </div>
             </div>
@@ -827,7 +831,7 @@ const BugArena = ({ onAbort }) => {
 
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: '1.5rem', gap: '0.8rem', flexWrap: 'wrap' }}>
             <button
-              className="ba-neon-btn"
+              className="ba-neon-btn ba-btn-yellow"
               onClick={handleSubmitCode}
               disabled={!code.trim() || createdBugs.filter(b => b.description.trim()).length === 0 || isSubmitting}
             >
@@ -836,7 +840,13 @@ const BugArena = ({ onAbort }) => {
             </button>
             <button
               className="ba-neon-btn ba-btn-cyan"
-              onClick={() => setPhase('exchange')}
+              onClick={() => {
+                if (submittedKey) {
+                  setPhase('exchange');
+                } else {
+                  showToast('Please submit your bug code first!', 'error');
+                }
+              }}
             >
               <span className="ba-btn-icon">🔄</span>
               Go to Exchange
@@ -1021,10 +1031,11 @@ const BugArena = ({ onAbort }) => {
                 <button
                   className="ba-neon-btn ba-btn-green"
                   onClick={handleGenerateReport}
-                  disabled={foundBugs.filter(b => b.description.trim()).length === 0}
+                  disabled={foundBugs.filter(b => b.description.trim()).length === 0 || reportSubmitted}
+                  title={reportSubmitted ? 'Report already submitted — submission locked' : ''}
                 >
                   <span className="ba-btn-icon">📋</span>
-                  Generate & Copy Report
+                  {reportSubmitted ? '✓ Report Submitted' : 'Generate & Copy Report'}
                 </button>
               </div>
             </div>
@@ -1044,30 +1055,79 @@ const BugArena = ({ onAbort }) => {
                 </div>
               </div>
               <div className="ba-report-summary-body">
-                <pre>{reportGenerated}</pre>
-                <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    className="ba-neon-btn ba-btn-green ba-btn-sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(reportGenerated);
-                      showToast('Report copied again!');
-                    }}
-                  >
-                    📋 Copy Report
-                  </button>
-                  <button
-                    className="ba-neon-btn ba-btn-cyan ba-btn-sm"
-                    onClick={() => {
-                      setDecodedData(null);
-                      setImportString('');
-                      setFoundBugs([{ id: 1, lineNumber: '', description: '', fix: '' }]);
-                      setReportGenerated(null);
-                      setPhase('exchange');
-                    }}
-                  >
-                    🔄 Review Another Code
-                  </button>
-                </div>
+                {reportSubmitted ? (
+                  /* ── THANK YOU SCREEN (blocks further action) ── */
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '2.5rem 1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '1.2rem'
+                  }}>
+                    <div style={{ fontSize: '3rem' }}>🏆</div>
+                    <h2 style={{
+                      fontFamily: 'Space Grotesk, sans-serif',
+                      fontSize: 'clamp(1.4rem, 4vw, 2rem)',
+                      fontWeight: 900,
+                      background: 'linear-gradient(135deg, #ff6b6b 0%, #ff9f43 40%, #00ffff 70%, #9d4edd 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      letterSpacing: '0.04em',
+                      margin: 0
+                    }}>
+                      THANK YOU FOR PARTICIPATION!
+                    </h2>
+                    <p style={{ color: '#7a7a9e', fontSize: '0.95rem', maxWidth: '420px', lineHeight: 1.6 }}>
+                      Your bug report has been submitted and synced to the Admin Portal.
+                      Await the final results from the event organisers.
+                    </p>
+                    <div style={{
+                      padding: '0.6rem 1.8rem',
+                      background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.12), rgba(0, 255, 255, 0.08))',
+                      border: '1px solid rgba(0, 255, 255, 0.3)',
+                      borderRadius: '50px',
+                      color: '#00ffff',
+                      fontSize: '0.8rem',
+                      fontFamily: 'Space Grotesk, sans-serif',
+                      fontWeight: 700,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase'
+                    }}>
+                      ✓ Submission Locked
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Normal Report View ── */
+                  <>
+                    <pre>{reportGenerated}</pre>
+                    <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        className="ba-neon-btn ba-btn-green ba-btn-sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(reportGenerated);
+                          showToast('Report copied again!');
+                        }}
+                      >
+                        📋 Copy Report
+                      </button>
+                      <button
+                        className="ba-neon-btn ba-btn-cyan ba-btn-sm"
+                        onClick={() => {
+                          setDecodedData(null);
+                          setImportString('');
+                          setFoundBugs([{ id: 1, lineNumber: '', description: '', fix: '' }]);
+                          setReportGenerated(null);
+                          setReportSubmitted(false);
+                          setPhase('exchange');
+                        }}
+                      >
+                        🔄 Review Another Code
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1527,7 +1587,13 @@ const BugArena = ({ onAbort }) => {
               <div className="ba-phase-connector" />
               <button
                 className={`ba-phase ${phase === 'exchange' ? 'ba-phase-active' : ''}`}
-                onClick={() => setPhase('exchange')}
+                onClick={() => {
+                  if (submittedKey) {
+                    setPhase('exchange');
+                  } else {
+                    showToast('Please create and submit a bug first!', 'error');
+                  }
+                }}
               >
                 <span className="ba-phase-icon">🔄</span>
                 <span>Exchange</span>
@@ -1535,7 +1601,7 @@ const BugArena = ({ onAbort }) => {
               <div className="ba-phase-connector" />
               <button
                 className={`ba-phase ${phase === 'hunt' ? 'ba-phase-active' : ''}`}
-                onClick={() => { if (decodedData) setPhase('hunt'); }}
+                onClick={() => { if (decodedData) setPhase('hunt'); else showToast('Decode a key first!', 'error'); }}
                 disabled={!decodedData}
               >
                 <span className="ba-phase-icon">🐛</span>
@@ -1615,7 +1681,7 @@ const BugArena = ({ onAbort }) => {
                     </select>
                   </div>
 
-                  <button type="submit" className="ba-neon-btn" style={{ alignSelf: 'center', marginTop: '0.5rem' }}>
+                  <button type="submit" className="ba-neon-btn ba-btn-cyan" style={{ alignSelf: 'center', marginTop: '0.5rem' }}>
                     <span className="ba-btn-icon">⚡</span>
                     Enter the Arena
                   </button>

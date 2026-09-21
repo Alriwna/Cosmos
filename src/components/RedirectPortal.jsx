@@ -284,7 +284,7 @@ const TEAM_MEMBERS = [
     badge: "TECHNICAL",
     dept: "Cyber Security · 4th Year",
     bio: "Passionate coder leading technical development and setting challenging milestones for the development team.",
-    tags: ["Data Structures & Algorithms", "Full Stack Development", "Competitive Programming"],
+    tags: ["Penetration Testing & Vulnerability Assessment", "SOC Operations & Threat Intelligence", "Digital Forensics & AI Security"],
     color: "#3b82f6", // Blue
     linkedin: "https://www.linkedin.com/in/subid-kant-nigam-3339142ab/",
     cropStyle: {
