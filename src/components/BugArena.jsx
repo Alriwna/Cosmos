@@ -1430,7 +1430,7 @@ const BugArena = ({ onAbort }) => {
             </div>
             <div className="ba-reg-qr-body">
               <div className="ba-reg-qr-wrap">
-                <img src="/bugarena_qr.jpg?v=2" alt="Bug Arena Payment QR Code" className="ba-reg-qr-img" />
+                <img src="/bugarena_qr.png?v=3" alt="Bug Arena Payment QR Code" className="ba-reg-qr-img" />
                 <div className="ba-reg-qr-glow" />
               </div>
               <div className="ba-reg-fee-badge">
