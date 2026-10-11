@@ -1430,7 +1430,7 @@ const BugArena = ({ onAbort }) => {
             </div>
             <div className="ba-reg-qr-body">
               <div className="ba-reg-qr-wrap">
-                <img src="/bugarena_qr.jpg" alt="Bug Arena Payment QR Code" className="ba-reg-qr-img" />
+                <img src="/bugarena_qr.jpg?v=2" alt="Bug Arena Payment QR Code" className="ba-reg-qr-img" />
                 <div className="ba-reg-qr-glow" />
               </div>
               <div className="ba-reg-fee-badge">
@@ -1441,15 +1441,19 @@ const BugArena = ({ onAbort }) => {
                 </span>
               </div>
               <div className="ba-reg-upi-section">
-                <div className="ba-reg-upi-label">💳 Pay to these UPI IDs:</div>
+                <div className="ba-reg-upi-label">💳 Pay to UPI ID / QR:</div>
                 <div className="ba-reg-upi-list">
-                  <div className="ba-reg-upi-item">
-                    <span className="ba-reg-upi-name">Nexus Bug Arena</span>
-                    <span className="ba-reg-upi-id">bugarena@nexus</span>
-                  </div>
-                  <div className="ba-reg-upi-item">
+                  <div
+                    className="ba-reg-upi-item"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => {
+                      navigator.clipboard?.writeText('ashraydwivedi2@oksbi');
+                      showToast('Copied UPI ID: ashraydwivedi2@oksbi');
+                    }}
+                    title="Click to copy UPI ID"
+                  >
                     <span className="ba-reg-upi-name">Event Coordinator</span>
-                    <span className="ba-reg-upi-id">nexustechclub@okaxis</span>
+                    <span className="ba-reg-upi-id">ashraydwivedi2@oksbi 📋</span>
                   </div>
                 </div>
               </div>
