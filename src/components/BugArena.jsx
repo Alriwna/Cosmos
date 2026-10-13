@@ -1807,27 +1807,62 @@ const BugArena = ({ onAbort }) => {
   const renderCreatePhase = () => {
     if (globalEventPhase === 'pre_event') {
       return (
-        <div className="ba-fade-in" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ color: '#00ffff', fontSize: '2.5rem', marginBottom: '1rem', fontFamily: 'Space Grotesk, sans-serif' }}>Waiting Room</h2>
-          <p style={{ color: '#a0a0c5', fontSize: '1.1rem', maxWidth: '500px', margin: '0 auto', lineHeight: 1.6 }}>
-            The event has not started yet. Please wait for the admin to initiate the Coding Phase.
+        <div className="ba-fade-in ba-waitroom">
+          {/* Decorative ring */}
+          <div className="ba-waitroom-ring ba-waitroom-ring--cyan">
+            <div className="ba-waitroom-ring-inner">
+              <span className="ba-waitroom-icon">⏳</span>
+            </div>
+          </div>
+          {/* Step badge */}
+          <div className="ba-waitroom-step">
+            <span className="ba-waitroom-step-dot ba-waitroom-step-dot--cyan" />
+            Phase 1 of 5
+          </div>
+          <h2 className="ba-waitroom-title" style={{ color: '#00ffff' }}>Waiting Room</h2>
+          <p className="ba-waitroom-desc">
+            The event has not started yet.<br />
+            Please wait for the admin to initiate the <strong>Coding Phase</strong>.
           </p>
-          <div style={{ fontSize: '4rem', marginTop: '2.5rem', animation: 'ba-pulse-warn 2s infinite' }}>⏳</div>
+          <div className="ba-waitroom-status ba-waitroom-status--cyan">
+            <span className="ba-waitroom-pulse-dot ba-waitroom-pulse-dot--cyan" />
+            Admin has not started the event yet — standby
+          </div>
+          <div className="ba-waitroom-hint">
+            💡 Tip: Make sure your team name is correct before the phase begins.
+          </div>
         </div>
       );
     }
     
     if (globalEventPhase !== 'coding' && !submittedKey) {
       return (
-        <div className="ba-fade-in" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ color: '#ff5f56', fontSize: '2.5rem', marginBottom: '1rem', fontFamily: 'Space Grotesk, sans-serif' }}>Coding Phase Ended</h2>
-          <p style={{ color: '#a0a0c5', fontSize: '1.1rem', maxWidth: '500px', margin: '0 auto', lineHeight: 1.6 }}>
-            The coding phase is over. Your code has been automatically submitted. Please proceed to the Exchange Phase.
+        <div className="ba-fade-in ba-waitroom">
+          <div className="ba-waitroom-ring ba-waitroom-ring--red">
+            <div className="ba-waitroom-ring-inner">
+              <span className="ba-waitroom-icon">🔒</span>
+            </div>
+          </div>
+          <div className="ba-waitroom-step">
+            <span className="ba-waitroom-step-dot ba-waitroom-step-dot--red" />
+            Coding Phase Ended
+          </div>
+          <h2 className="ba-waitroom-title" style={{ color: '#ff5f56' }}>Coding Phase Closed</h2>
+          <p className="ba-waitroom-desc">
+            The coding window has closed.<br />
+            Your code has been automatically submitted. Head to the <strong>Exchange Portal</strong>.
           </p>
-          <button className="ba-neon-btn ba-btn-cyan" onClick={() => setPhase('exchange')} style={{ marginTop: '1.5rem' }}>Go to Exchange Portal</button>
+          <div className="ba-waitroom-status ba-waitroom-status--red">
+            <span className="ba-waitroom-pulse-dot ba-waitroom-pulse-dot--red" />
+            Code submission locked
+          </div>
+          <button className="ba-neon-btn ba-btn-cyan" onClick={() => setPhase('exchange')} style={{ marginTop: '1.5rem' }}>
+            🔄 Go to Exchange Portal
+          </button>
         </div>
       );
     }
+
 
     return (
     <div className="ba-fade-in">
@@ -2038,24 +2073,56 @@ const BugArena = ({ onAbort }) => {
   const renderExchangePhase = () => {
     if (globalEventPhase === 'coding' || globalEventPhase === 'pre_event') {
       return (
-        <div className="ba-fade-in" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ color: '#00ffff', fontSize: '2.5rem', marginBottom: '1rem', fontFamily: 'Space Grotesk, sans-serif' }}>Not Ready Yet</h2>
-          <p style={{ color: '#a0a0c5', fontSize: '1.1rem', maxWidth: '500px', margin: '0 auto', lineHeight: 1.6 }}>
-            You cannot exchange codes until the Coding Phase has officially ended.
+        <div className="ba-fade-in ba-waitroom">
+          <div className="ba-waitroom-ring ba-waitroom-ring--yellow">
+            <div className="ba-waitroom-ring-inner">
+              <span className="ba-waitroom-icon">⏸️</span>
+            </div>
+          </div>
+          <div className="ba-waitroom-step">
+            <span className="ba-waitroom-step-dot ba-waitroom-step-dot--yellow" />
+            Phase 3 of 5
+          </div>
+          <h2 className="ba-waitroom-title" style={{ color: '#fbbf24' }}>Exchange Portal</h2>
+          <p className="ba-waitroom-desc">
+            Code exchange hasn’t opened yet.<br />
+            Finish writing your buggy code in the <strong>Coding Phase</strong> first.
           </p>
-          <button className="ba-neon-btn ba-btn-cyan" onClick={() => setPhase('create')} style={{ marginTop: '1.5rem' }}>Back to Create</button>
+          <div className="ba-waitroom-status ba-waitroom-status--yellow">
+            <span className="ba-waitroom-pulse-dot ba-waitroom-pulse-dot--yellow" />
+            Coding phase is still active
+          </div>
+          <button className="ba-neon-btn ba-btn-cyan" onClick={() => setPhase('create')} style={{ marginTop: '1.5rem' }}>
+            ← Back to Coding
+          </button>
         </div>
       );
     }
 
     if (globalEventPhase === 'exchange') {
       return (
-        <div className="ba-fade-in" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ color: '#fbbf24', fontSize: '2.5rem', marginBottom: '1rem', fontFamily: 'Space Grotesk, sans-serif' }}>Code Exchange Portal</h2>
-          <p style={{ color: '#a0a0c5', fontSize: '1.1rem', maxWidth: '500px', margin: '0 auto', lineHeight: 1.6 }}>
-            The admin is currently collecting and distributing the codes. Please wait until the Hunting Phase officially begins.
+        <div className="ba-fade-in ba-waitroom">
+          <div className="ba-waitroom-ring ba-waitroom-ring--purple">
+            <div className="ba-waitroom-ring-inner">
+              <span className="ba-waitroom-icon">🤝</span>
+            </div>
+          </div>
+          <div className="ba-waitroom-step">
+            <span className="ba-waitroom-step-dot ba-waitroom-step-dot--purple" />
+            Phase 3 of 5 — Exchanging
+          </div>
+          <h2 className="ba-waitroom-title" style={{ color: '#9d4edd' }}>Code Exchange Portal</h2>
+          <p className="ba-waitroom-desc">
+            The admin is collecting and distributing keys.<br />
+            Please wait until the <strong>Bug Hunting Phase</strong> officially begins.
           </p>
-          <div style={{ fontSize: '4rem', marginTop: '2.5rem', animation: 'ba-pulse-warn 2s infinite' }}>🤝</div>
+          <div className="ba-waitroom-status ba-waitroom-status--purple">
+            <span className="ba-waitroom-pulse-dot ba-waitroom-pulse-dot--purple" />
+            Admin is distributing codes — standby
+          </div>
+          <div className="ba-waitroom-hint">
+            💡 You’ll receive a 6-letter key from your team or event host.
+          </div>
         </div>
       );
     }
@@ -2131,12 +2198,29 @@ const BugArena = ({ onAbort }) => {
   const renderHuntPhase = () => {
     if (globalEventPhase === 'post_event') {
       return (
-        <div className="ba-fade-in" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ color: '#ff5f56', fontSize: '2.5rem', marginBottom: '1rem', fontFamily: 'Space Grotesk, sans-serif' }}>Hunting Phase Ended</h2>
-          <p style={{ color: '#a0a0c5', fontSize: '1.1rem', maxWidth: '500px', margin: '0 auto', lineHeight: 1.6 }}>
-            The event has concluded. Your bug report has been automatically submitted.
+        <div className="ba-fade-in ba-waitroom">
+          <div className="ba-waitroom-ring ba-waitroom-ring--green">
+            <div className="ba-waitroom-ring-inner">
+              <span className="ba-waitroom-icon">🏁</span>
+            </div>
+          </div>
+          <div className="ba-waitroom-step">
+            <span className="ba-waitroom-step-dot ba-waitroom-step-dot--green" />
+            Phase 5 of 5 — Event Ended
+          </div>
+          <h2 className="ba-waitroom-title" style={{ color: '#4ade80' }}>Hunting Phase Ended</h2>
+          <p className="ba-waitroom-desc">
+            The event has concluded.<br />
+            Your bug report has been <strong>automatically submitted</strong>.
+            Await the final results from the organizers.
           </p>
-          <div style={{ fontSize: '4rem', marginTop: '2.5rem' }}>🏁</div>
+          <div className="ba-waitroom-status ba-waitroom-status--green">
+            <span className="ba-waitroom-pulse-dot ba-waitroom-pulse-dot--green" />
+            All submissions locked — judging in progress
+          </div>
+          <div className="ba-waitroom-hint">
+            🏆 Stay tuned for the final leaderboard!
+          </div>
         </div>
       );
     }
