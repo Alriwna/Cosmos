@@ -2143,6 +2143,40 @@ const BugArena = ({ onAbort }) => {
 
     return (
     <div className="ba-fade-in">
+
+      {/* ── THANK YOU MODAL — renders as full-screen overlay on submission ── */}
+      {reportSubmitted && (
+        <div className="ba-thankyou-overlay">
+          <div className="ba-thankyou-card">
+            {/* Burst star particles */}
+            <div className="ba-thankyou-stars">
+              {[...Array(10)].map((_, i) => (
+                <span
+                  key={i}
+                  className="ba-thankyou-star"
+                  style={{
+                    left: `${40 + Math.cos((i / 10) * Math.PI * 2) * 35}%`,
+                    top:  `${40 + Math.sin((i / 10) * Math.PI * 2) * 35}%`,
+                    background: ['#ff6b6b','#ff9f43','#00ffff','#9d4edd','#fbbf24','#4ade80'][i % 6],
+                    '--tx': `${(Math.random() - 0.5) * 120}px`,
+                    '--ty': `${(Math.random() - 0.5) * 120}px`,
+                    animationDelay: `${i * 0.07}s`,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="ba-thankyou-emoji">🏆</div>
+            <h2 className="ba-thankyou-title">THANK YOU FOR PARTICIPATION!</h2>
+            <p className="ba-thankyou-sub">
+              Your bug report has been submitted and synced to the Admin Portal.
+              Await the final results from the event organisers.
+            </p>
+            <div className="ba-thankyou-badge">✓ Submission Locked</div>
+          </div>
+        </div>
+      )}
+
       <div className="ba-section-header">
         <div className="ba-section-line" />
         <h2 className="ba-section-title">🐛 Hunt the Bug!</h2>
@@ -2272,51 +2306,8 @@ const BugArena = ({ onAbort }) => {
                 </div>
               </div>
               <div className="ba-report-summary-body">
-                {reportSubmitted ? (
-                  /* ── THANK YOU SCREEN (blocks further action) ── */
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '2.5rem 1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '1.2rem'
-                  }}>
-                    <div style={{ fontSize: '3rem' }}>🏆</div>
-                    <h2 style={{
-                      fontFamily: 'Space Grotesk, sans-serif',
-                      fontSize: 'clamp(1.4rem, 4vw, 2rem)',
-                      fontWeight: 900,
-                      background: 'linear-gradient(135deg, #ff6b6b 0%, #ff9f43 40%, #00ffff 70%, #9d4edd 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                      letterSpacing: '0.04em',
-                      margin: 0
-                    }}>
-                      THANK YOU FOR PARTICIPATION!
-                    </h2>
-                    <p style={{ color: '#7a7a9e', fontSize: '0.95rem', maxWidth: '420px', lineHeight: 1.6 }}>
-                      Your bug report has been submitted and synced to the Admin Portal.
-                      Await the final results from the event organisers.
-                    </p>
-                    <div style={{
-                      padding: '0.6rem 1.8rem',
-                      background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.12), rgba(0, 255, 255, 0.08))',
-                      border: '1px solid rgba(0, 255, 255, 0.3)',
-                      borderRadius: '50px',
-                      color: '#00ffff',
-                      fontSize: '0.8rem',
-                      fontFamily: 'Space Grotesk, sans-serif',
-                      fontWeight: 700,
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase'
-                    }}>
-                      ✓ Submission Locked
-                    </div>
-                  </div>
-                ) : (
-                  /* ── Normal Report View ── */
+                {/* Normal report view — always visible */}
+                {reportGenerated && (
                   <>
                     <pre>{reportGenerated}</pre>
                     <div style={{ display: 'flex', gap: '0.8rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -2326,6 +2317,7 @@ const BugArena = ({ onAbort }) => {
                           navigator.clipboard.writeText(reportGenerated);
                           showToast('Report copied again!');
                         }}
+                        disabled={reportSubmitted}
                       >
                         📋 Copy Report
                       </button>
@@ -2339,10 +2331,16 @@ const BugArena = ({ onAbort }) => {
                           setReportSubmitted(false);
                           setPhase('exchange');
                         }}
+                        disabled={reportSubmitted}
                       >
                         🔄 Review Another Code
                       </button>
                     </div>
+                    {reportSubmitted && (
+                      <div style={{ textAlign: 'center', marginTop: '0.6rem', color: '#00ffff', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.1em' }}>
+                        ✓ SUBMISSION LOCKED
+                      </div>
+                    )}
                   </>
                 )}
               </div>

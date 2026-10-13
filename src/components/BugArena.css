@@ -1205,6 +1205,147 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── Thank-You Submission Modal ──────────────────────────────────────────── */
+.ba-thankyou-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 20, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: baTyOverlayIn 0.35s ease forwards;
+}
+
+@keyframes baTyOverlayIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.ba-thankyou-card {
+  position: relative;
+  background: linear-gradient(145deg, #0e0e2a 0%, #12122e 60%, #0a0a20 100%);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 24px;
+  padding: 3rem 3.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4rem;
+  max-width: 520px;
+  width: 90vw;
+  box-shadow:
+    0 0 0 1px rgba(255, 107, 107, 0.25),
+    0 0 60px rgba(255, 107, 107, 0.12),
+    0 0 120px rgba(0, 255, 255, 0.08),
+    0 30px 80px rgba(0, 0, 0, 0.7);
+  animation: baTyCardPop 0.55s cubic-bezier(0.22, 1.5, 0.4, 1) forwards;
+}
+
+@keyframes baTyCardPop {
+  0%   { opacity: 0; transform: scale(0.55) translateY(30px); }
+  60%  { opacity: 1; transform: scale(1.04) translateY(-4px); }
+  80%  { transform: scale(0.98) translateY(2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Animated glow border ring */
+.ba-thankyou-card::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, #ff6b6b, #ff9f43, #00ffff, #9d4edd, #ff6b6b);
+  background-size: 300% 300%;
+  animation: baTyBorderSpin 3s linear infinite;
+  z-index: -1;
+}
+
+@keyframes baTyBorderSpin {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.ba-thankyou-emoji {
+  font-size: 4rem;
+  animation: baTyBounce 1s cubic-bezier(0.22, 1.5, 0.4, 1) 0.3s both;
+  filter: drop-shadow(0 0 18px rgba(255, 159, 67, 0.6));
+}
+
+@keyframes baTyBounce {
+  0%   { transform: scale(0); opacity: 0; }
+  70%  { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.ba-thankyou-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(1.5rem, 5vw, 2.1rem);
+  font-weight: 900;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff9f43 35%, #00ffff 65%, #9d4edd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.03em;
+  margin: 0;
+  animation: baTySlideUp 0.5s ease 0.15s both;
+}
+
+.ba-thankyou-sub {
+  color: #8888b8;
+  font-size: 1rem;
+  line-height: 1.65;
+  max-width: 380px;
+  margin: 0;
+  animation: baTySlideUp 0.5s ease 0.25s both;
+}
+
+.ba-thankyou-badge {
+  padding: 0.55rem 2rem;
+  background: linear-gradient(135deg, rgba(255,107,107,0.1), rgba(0,255,255,0.07));
+  border: 1px solid rgba(0, 255, 255, 0.35);
+  border-radius: 50px;
+  color: #00ffff;
+  font-size: 0.82rem;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: baTySlideUp 0.5s ease 0.35s both;
+}
+
+@keyframes baTySlideUp {
+  0%   { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Stars / particles around the card */
+.ba-thankyou-stars {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ba-thankyou-star {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: baTyStar 1.6s ease-out forwards;
+}
+
+@keyframes baTyStar {
+  0%   { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
+}
+
 /* ─── Footer ──────────────────────────────────────────────────────────────── */
 .ba-footer {
   text-align: center;
