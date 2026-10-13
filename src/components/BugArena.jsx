@@ -501,6 +501,11 @@ const BugArena = ({ onAbort }) => {
   const [activeCheatReportId, setActiveCheatReportId] = useState(null);
   const [reentryRequested, setReentryRequested] = useState(false);
   const [unlockGracePeriod, setUnlockGracePeriod] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenDismissed, setFullscreenDismissed] = useState(false);
+  // Ref to hold the previous submission key when editing code after submit
+  // (survives submittedKey being cleared to show the editor again)
+  const pendingEditKeyRef = useRef(null);
 
   // Restore session from sessionStorage on initial load
   useEffect(() => {
@@ -714,6 +719,24 @@ const BugArena = ({ onAbort }) => {
     window.addEventListener('keydown', handleKeyCombo);
     return () => window.removeEventListener('keydown', handleKeyCombo);
   }, [isAdminLoggedIn]);
+
+  // Track real fullscreen state
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // Auto-request fullscreen when coding phase starts
+  useEffect(() => {
+    const shouldBeFullscreen = isSetup && isRegistered && !isAdminLoggedIn &&
+      (phase === 'create' || phase === 'hunt') && !isLocked;
+    if (shouldBeFullscreen && !isFullscreen && !fullscreenDismissed) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  }, [isSetup, isRegistered, phase, isAdminLoggedIn, isLocked, isFullscreen, fullscreenDismissed]);
 
   // Proctoring is ONLY active when user is in code-writing phases
   // (not during registration, setup, admin mode, or while locked / in unlock grace period)
@@ -1111,6 +1134,8 @@ const BugArena = ({ onAbort }) => {
   };
 
   // ── Submit Code & Generate 6-Character Key ──
+  // Uses a stable team-based slot key so re-submissions UPSERT the same entry
+  // (admin panel always shows only the LATEST version)
   const handleSubmitCode = async () => {
     if (!code.trim()) {
       showToast('Write some code before submitting!', 'error');
@@ -1123,9 +1148,18 @@ const BugArena = ({ onAbort }) => {
     }
 
     setIsSubmitting(true);
-    const key = generate6CharKey();
+
+    // Use the SAME key as the previous submission (if editing) so admin sees one entry.
+    // Only generate a new key on the very first submission for this team.
+    // pendingEditKeyRef holds the key when user clicked "Edit & Resubmit" (submittedKey was cleared for UX)
+    const existingKey = submittedKey || pendingEditKeyRef.current;
+    const isResubmit = !!existingKey;
+    const key = isResubmit ? existingKey : generate6CharKey();
+    pendingEditKeyRef.current = null; // consumed
+
     const payload = {
       team: teamName.trim() || 'Team Anonymous',
+      registrationId: registrationId || '',
       language,
       code,
       createdBugs: validBugs,
@@ -1133,19 +1167,23 @@ const BugArena = ({ onAbort }) => {
       bugInfo: validBugs.map(b => b.description).join(' | '),
       key,
       timestamp: Date.now(),
+      updatedAt: isResubmit ? Date.now() : null,
+      isEdited: isResubmit,
     };
 
-    // 1. Store in localStorage
+    // 1. Store in localStorage (keyed by team key)
     try {
       localStorage.setItem(`nexus_bug_${key}`, JSON.stringify(payload));
     } catch (e) {
       console.warn('LocalStorage warning:', e);
     }
 
-    // 2. Sync to online JSONBlob registry
+    // 2. Sync to online registry — UPSERT under same key, removing old key if team changed
     try {
       const getRes = await fetch(REGISTRY_URL);
       const registry = (await getRes.json()) || {};
+
+      // Write/overwrite with the SAME key — this replaces any previous submission in-place
       registry[key] = payload;
 
       await fetch(REGISTRY_URL, {
@@ -1159,7 +1197,11 @@ const BugArena = ({ onAbort }) => {
 
     setSubmittedKey(key);
     setIsSubmitting(false);
-    showToast(`Code submitted with ${validBugs.length} bug(s)! Key: ${key}`);
+    if (isResubmit) {
+      showToast(`✅ Code updated! Admin panel now shows your latest version. Key: ${key}`);
+    } else {
+      showToast(`Code submitted with ${validBugs.length} bug(s)! Key: ${key}`);
+    }
   };
 
   // ── Decode 6-Character Key ──
@@ -1799,6 +1841,50 @@ const BugArena = ({ onAbort }) => {
         Click <strong>Submit Bug Code</strong> to generate your unique 6-letter encrypted key!
       </p>
 
+      {/* Fullscreen prompt banner */}
+      {!isFullscreen && !fullscreenDismissed && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(251,191,36,0.15) 0%, rgba(255,107,107,0.1) 100%)',
+          border: '2px solid rgba(251,191,36,0.5)',
+          borderRadius: '12px',
+          padding: '1rem 1.4rem',
+          marginBottom: '1.2rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+            <span style={{ fontSize: '1.4rem' }}>⛶</span>
+            <div>
+              <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.9rem', fontFamily: 'Space Grotesk, sans-serif' }}>
+                Fullscreen Required for Proctoring
+              </div>
+              <div style={{ color: '#a0a0c5', fontSize: '0.78rem', marginTop: '0.15rem' }}>
+                Exiting fullscreen during the coding phase will be flagged as a proctoring violation.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.6rem', flexShrink: 0 }}>
+            <button
+              className="ba-neon-btn ba-btn-sm"
+              style={{ background: 'rgba(251,191,36,0.2)', borderColor: 'rgba(251,191,36,0.6)', color: '#fbbf24' }}
+              onClick={() => document.documentElement.requestFullscreen?.().catch(() => {})}
+            >
+              ⛶ Enter Fullscreen
+            </button>
+            <button
+              className="ba-neon-btn ba-btn-sm"
+              style={{ background: 'rgba(107,107,138,0.1)', borderColor: 'rgba(107,107,138,0.3)', color: '#6b6b8a', fontSize: '0.7rem' }}
+              onClick={() => setFullscreenDismissed(true)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {submittedKey ? (
         <div className="ba-submitted-card ba-fade-in">
           <div className="ba-submitted-body">
@@ -1834,9 +1920,14 @@ const BugArena = ({ onAbort }) => {
               </button>
               <button
                 className="ba-neon-btn ba-btn-sm ba-btn-yellow"
-                onClick={() => setSubmittedKey('')}
+                onClick={() => {
+                  // Save the current key into the ref so handleSubmitCode can
+                  // reuse it (upsert) when the user re-submits after editing.
+                  pendingEditKeyRef.current = submittedKey;
+                  setSubmittedKey(''); // show the editor again
+                }}
               >
-                ✏️ Edit Code
+                ✏️ Edit &amp; Resubmit Code
               </button>
             </div>
           </div>
