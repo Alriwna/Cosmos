@@ -500,6 +500,43 @@ const BugArena = ({ onAbort }) => {
   const [isLocked, setIsLocked] = useState(false);
   const [activeCheatReportId, setActiveCheatReportId] = useState(null);
   const [reentryRequested, setReentryRequested] = useState(false);
+  const [unlockGracePeriod, setUnlockGracePeriod] = useState(false);
+
+  // Restore session from sessionStorage on initial load
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('bugarena_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.teamName) setTeamName(parsed.teamName);
+        if (parsed.registrationId) setRegistrationId(parsed.registrationId);
+        if (parsed.isRegistered) setIsRegistered(parsed.isRegistered);
+        if (parsed.isSetup) setIsSetup(parsed.isSetup);
+        if (parsed.language) setLanguage(parsed.language);
+        if (parsed.isLocked) setIsLocked(parsed.isLocked);
+        if (parsed.activeCheatReportId) setActiveCheatReportId(parsed.activeCheatReportId);
+        if (parsed.reentryRequested) setReentryRequested(parsed.reentryRequested);
+        if (parsed.phase && parsed.phase !== 'admin') setPhase(parsed.phase);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Sync core session state to sessionStorage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('bugarena_session', JSON.stringify({
+        teamName,
+        registrationId,
+        isRegistered,
+        isSetup,
+        language,
+        phase: phase === 'admin' ? 'create' : phase,
+        isLocked,
+        activeCheatReportId,
+        reentryRequested,
+      }));
+    } catch { /* ignore */ }
+  }, [teamName, registrationId, isRegistered, isSetup, language, phase, isLocked, activeCheatReportId, reentryRequested]);
 
   useEffect(() => {
     let i = 0;
@@ -591,48 +628,76 @@ const BugArena = ({ onAbort }) => {
     }
   }, [globalEventPhase, submittedKey, isAdminLoggedIn, phase]);
 
-  // Poll lock status when locked — only unlock on EXPLICIT admin approval
+  // Poll lock status when locked — responsive poll (every 2.5s)
   useEffect(() => {
-    if (!isLocked || !teamName) return;
-    const intervalId = setInterval(async () => {
+    if (!isLocked) return;
+    const identifier = teamName || registrationId;
+    if (!identifier) return;
+
+    let isMounted = true;
+    const checkLockStatus = async () => {
       try {
-        const res = await fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(teamName)}`);
+        const res = await fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(identifier)}`);
+        if (!res.ok) return;
         const data = await res.json();
-        // ONLY unlock if admin explicitly approved — never auto-unlock on missing record
-        if (data.reentryApproved === true) {
-           setIsLocked(false);
-           setCheatWarnings(0);
-           setReentryRequested(false);
-           showToast('Admin approved your re-entry. Play fair!', 'success');
+        if (!isMounted) return;
+
+        if ((data._id || data.reportId) && !activeCheatReportId) {
+          setActiveCheatReportId(data._id || data.reportId);
+        }
+        if (typeof data.reentryRequested === 'boolean') {
+          setReentryRequested(data.reentryRequested);
+        }
+
+        // ONLY unlock if admin explicitly approved or cleared
+        if (data.reentryApproved === true || (data.locked === false && data.noReport !== true)) {
+          setIsLocked(false);
+          setCheatWarnings(0);
+          setReentryRequested(false);
+          // Grace period so player can focus their window without instant re-lock
+          setUnlockGracePeriod(true);
+          setTimeout(() => {
+            setUnlockGracePeriod(false);
+          }, 8000);
+          showToast('Admin approved your re-entry. Welcome back!', 'success');
         }
       } catch (e) {
         // ignore
       }
-    }, 10000); // 10s is enough — admin action is not instant anyway, and it saves server load
-    return () => clearInterval(intervalId);
-  }, [isLocked, teamName]);
+    };
+
+    // Immediate check
+    checkLockStatus();
+    // 2.5s interval for fast re-entry response
+    const intervalId = setInterval(checkLockStatus, 2500);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [isLocked, teamName, registrationId, activeCheatReportId]);
 
   // INITIAL LOAD CHECK: Prevent bypassing lock by refreshing the page
   useEffect(() => {
-    if (isSetup && teamName && !isAdminLoggedIn) {
+    const identifier = teamName || registrationId;
+    if (identifier && !isAdminLoggedIn) {
       const checkInitialLock = async () => {
         try {
-          const res = await fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(teamName)}`);
+          const res = await fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(identifier)}`);
           if (res.ok) {
-             const data = await res.json();
-             if (data.locked === true && data.reentryApproved !== true) {
-               setIsLocked(true);
-               setCheatWarnings(3);
-               if (data._id) setActiveCheatReportId(data._id);
-               if (data.reentryRequested) setReentryRequested(true);
-             }
+            const data = await res.json();
+            if (data.locked === true && data.reentryApproved !== true) {
+              setIsLocked(true);
+              setCheatWarnings(1);
+              if (data._id || data.reportId) setActiveCheatReportId(data._id || data.reportId);
+              if (data.reentryRequested) setReentryRequested(true);
+            }
           }
         } catch (e) { /* ignore */ }
       };
       checkInitialLock();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSetup, teamName, isAdminLoggedIn]);
+  }, [isSetup, teamName, registrationId, isAdminLoggedIn]);
 
   useEffect(() => {
     const handleKeyCombo = (e) => {
@@ -651,14 +716,14 @@ const BugArena = ({ onAbort }) => {
   }, [isAdminLoggedIn]);
 
   // Proctoring is ONLY active when user is in code-writing phases
-  // (not during registration, setup, or admin mode)
+  // (not during registration, setup, admin mode, or while locked / in unlock grace period)
   const isProctoringActive =
-    isSetup && isRegistered && (phase === 'create' || phase === 'hunt') && !isAdminLoggedIn;
+    isSetup && isRegistered && (phase === 'create' || phase === 'hunt') && !isAdminLoggedIn && !isLocked && !unlockGracePeriod;
 
   useEffect(() => {
-    if (!isProctoringActive) return; // Guard: only run during code phases
+    if (!isProctoringActive) return; // Guard: only run during active code phases
 
-    const reportCheatToServer = async (reason, warnCount) => {
+    const reportCheatToServer = async (reason, warnCount = 1) => {
       try {
         const res = await fetch(`${SERVER_BASE}/api/cheat-report`, {
           method: 'POST',
@@ -670,12 +735,12 @@ const BugArena = ({ onAbort }) => {
             warnCount,
             phase,
             timestamp: Date.now(),
-            locked: warnCount >= 3,
+            locked: true,
           }),
         });
         const data = await res.json();
-        if (data.success && data.reportId) {
-          setActiveCheatReportId(data.reportId);
+        if (data.success && (data.reportId || data._id)) {
+          setActiveCheatReportId(data.reportId || data._id);
         }
       } catch (e) {
         console.warn('Could not report cheat event:', e);
@@ -683,19 +748,12 @@ const BugArena = ({ onAbort }) => {
     };
 
     const handleCheatingAttempt = (reason) => {
-      setCheatWarnings(prev => {
-        const newCount = prev + 1;
-        if (newCount >= 3) {
-          setIsLocked(true);
-          setReentryRequested(false);
-          reportCheatToServer(`LOCKED — final trigger: ${reason}`, newCount);
-        } else {
-          // Show inline warning toast
-          setToast({ message: `🚨 PROCTORING WARNING ${newCount}/3: ${reason}`, type: 'error' });
-          reportCheatToServer(reason, newCount);
-        }
-        return newCount;
-      });
+      // Zero tolerance: player gets NO CHANCE and will be locked on the very first violation!
+      setIsLocked(true);
+      setCheatWarnings(1);
+      setReentryRequested(false);
+      setToast({ message: `🚨 PROCTORING VIOLATION: ${reason}. Your screen has been locked!`, type: 'error' });
+      reportCheatToServer(`LOCKED — ${reason}`, 1);
     };
 
     const handleVisibilityChange = () => {
@@ -811,25 +869,57 @@ const BugArena = ({ onAbort }) => {
   };
 
   // Admin unlocks a participant from the server side
-  const handleAdminUnlockParticipant = async (reportId, teamName) => {
+  const handleAdminUnlockParticipant = async (reportId, teamName, regId) => {
     try {
-      await fetch(`${SERVER_BASE}/api/cheat-reports/${reportId}/approve-reentry`, { method: 'PATCH' });
-      setAdminCheatReports(prev => prev.map(r => r._id === reportId ? { ...r, reentryApproved: true, adminUnlocked: true, locked: false } : r));
-      showToast(`✅ ${teamName} has been unlocked and can re-enter.`);
+      const res = await fetch(`${SERVER_BASE}/api/cheat-reports/approve-reentry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportId, teamName, registrationId: regId }),
+      });
+      if (res.ok) {
+        setAdminCheatReports(prev => prev.map(r => r._id === reportId ? { ...r, reentryApproved: true, adminUnlocked: true, locked: false, reentryRequested: false } : r));
+        showToast(`✅ ${teamName} has been unlocked and can re-enter.`);
+        fetchAdminRegistryData();
+      } else {
+        // Fallback to patch
+        await fetch(`${SERVER_BASE}/api/cheat-reports/${reportId}/approve-reentry`, { method: 'PATCH' });
+        setAdminCheatReports(prev => prev.map(r => r._id === reportId ? { ...r, reentryApproved: true, adminUnlocked: true, locked: false, reentryRequested: false } : r));
+        showToast(`✅ ${teamName} has been unlocked and can re-enter.`);
+        fetchAdminRegistryData();
+      }
     } catch (e) {
       showToast('Could not unlock — server error', 'error');
     }
   };
 
   const handleRequestReentry = async () => {
-    if (!activeCheatReportId) {
+    const identifier = activeCheatReportId || registrationId || teamName;
+    if (!identifier) {
       showToast('No active lock session found.', 'error');
       return;
     }
     try {
-      await fetch(`${SERVER_BASE}/api/cheat-reports/${activeCheatReportId}/request-reentry`, { method: 'PATCH' });
-      setReentryRequested(true);
-      showToast('Re-entry request sent to admin. Please wait.');
+      const res = await fetch(`${SERVER_BASE}/api/cheat-reports/request-reentry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportId: activeCheatReportId || '',
+          teamName: teamName || '',
+          registrationId: registrationId || '',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReentryRequested(true);
+        if (data.report?._id) setActiveCheatReportId(data.report._id);
+        showToast('Re-entry request sent to admin. Please wait.');
+      } else if (activeCheatReportId) {
+        await fetch(`${SERVER_BASE}/api/cheat-reports/${activeCheatReportId}/request-reentry`, { method: 'PATCH' });
+        setReentryRequested(true);
+        showToast('Re-entry request sent to admin. Please wait.');
+      } else {
+        showToast(data.error || 'Could not send request', 'error');
+      }
     } catch (e) {
       showToast('Could not send request', 'error');
     }
@@ -965,12 +1055,28 @@ const BugArena = ({ onAbort }) => {
     setIsVerifying('');
   };
 
-  const handleSetup = (e) => {
+  const handleSetup = async (e) => {
     e.preventDefault();
     if (!teamName.trim()) {
       showToast('Please enter a team name', 'error');
       return;
     }
+    const identifier = teamName.trim() || registrationId;
+    try {
+      const res = await fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(identifier)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.locked === true && data.reentryApproved !== true) {
+          setIsLocked(true);
+          setCheatWarnings(1);
+          if (data._id || data.reportId) setActiveCheatReportId(data._id || data.reportId);
+          if (data.reentryRequested) setReentryRequested(true);
+          setIsSetup(true);
+          showToast('Session is locked due to a proctoring violation.', 'error');
+          return;
+        }
+      }
+    } catch { /* proceed */ }
     setIsSetup(true);
   };
 
@@ -1304,7 +1410,15 @@ const BugArena = ({ onAbort }) => {
         setRegTeamType(data.teamType);
         const memberNames = data.members.map(m => m.name).join(' & ');
         setTeamName(memberNames);
-        showToast('Login successful! Welcome to the Arena.');
+        if (data.isLocked) {
+          setIsLocked(true);
+          setCheatWarnings(1);
+          if (data.cheatReport?._id) setActiveCheatReportId(data.cheatReport._id);
+          if (data.cheatReport?.reentryRequested) setReentryRequested(true);
+          showToast('Account is locked due to a proctoring violation. Request re-entry to continue.', 'error');
+        } else {
+          showToast('Login successful! Welcome to the Arena.');
+        }
       } else {
         showToast(data.error || 'Login failed.', 'error');
       }
@@ -2894,8 +3008,8 @@ const BugArena = ({ onAbort }) => {
                               ✅ UNLOCKED BY ADMIN
                             </span>
                           )}
-                          <span style={{ background: 'rgba(157,78,221,0.1)', borderRadius: '8px', padding: '0.15rem 0.5rem', color: '#9d4edd', fontSize: '0.75rem', fontWeight: 700 }}>
-                            Warning {report.warnCount}/3
+                          <span style={{ background: 'rgba(255,68,68,0.15)', border: '1px solid rgba(255,68,68,0.3)', borderRadius: '8px', padding: '0.15rem 0.5rem', color: '#ff6b6b', fontSize: '0.75rem', fontWeight: 700 }}>
+                            🚨 Zero-Tolerance Violation
                           </span>
                           {report.phase && (
                             <span style={{ color: '#6b6b8a', fontSize: '0.75rem' }}>Phase: {report.phase}</span>
@@ -2928,7 +3042,7 @@ const BugArena = ({ onAbort }) => {
                         {report.locked && !report.adminUnlocked && (
                           <button
                             className="ba-neon-btn ba-btn-sm"
-                            onClick={() => handleAdminUnlockParticipant(report._id, report.teamName)}
+                            onClick={() => handleAdminUnlockParticipant(report._id, report.teamName, report.registrationId)}
                             style={{ background: 'rgba(74,222,128,0.15)', borderColor: 'rgba(74,222,128,0.5)', color: '#4ade80' }}
                           >
                             🔓 Unlock &amp; Re-Admit {report.teamName}
@@ -2966,8 +3080,8 @@ const BugArena = ({ onAbort }) => {
             ACCOUNT LOCKED
           </h1>
           <p style={{ color: '#ff9999', fontSize: '1.1rem', textAlign: 'center', maxWidth: '560px', lineHeight: 1.6, margin: 0 }}>
-            You have been flagged for suspicious activity during the exam.<br />
-            <strong style={{ color: '#ff4444' }}>3 proctoring violations detected.</strong><br />
+            You have been flagged for suspicious activity during the competition.<br />
+            <strong style={{ color: '#ff4444' }}>Proctoring violation detected — Zero Tolerance Policy.</strong><br />
             This incident has been reported to the administrator in real-time.
           </p>
           <div style={{ background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.4)', borderRadius: '12px', padding: '1.2rem 2rem', textAlign: 'center', maxWidth: '460px' }}>
@@ -2979,15 +3093,43 @@ const BugArena = ({ onAbort }) => {
               Click the button below to request readmission. The system will automatically resume once approved.
             </p>
             {reentryRequested ? (
-              <div style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px', padding: '0.8rem', color: '#fbbf24', fontSize: '0.9rem' }}>
-                ⏳ Request sent. Waiting for admin approval...
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <div style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: '8px', padding: '0.8rem', color: '#fbbf24', fontSize: '0.9rem' }}>
+                  ⏳ Request sent. Waiting for admin approval...
+                </div>
+                <button
+                  className="ba-neon-btn ba-btn-sm"
+                  style={{ background: 'rgba(74,222,128,0.15)', borderColor: 'rgba(74,222,128,0.4)', color: '#4ade80', width: '100%' }}
+                  onClick={async () => {
+                    const identifier = teamName || registrationId;
+                    if (!identifier) return;
+                    try {
+                      const res = await fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(identifier)}`);
+                      const data = await res.json();
+                      if (data.reentryApproved === true || (data.locked === false && data.noReport !== true)) {
+                        setIsLocked(false);
+                        setCheatWarnings(0);
+                        setReentryRequested(false);
+                        setUnlockGracePeriod(true);
+                        setTimeout(() => setUnlockGracePeriod(false), 8000);
+                        showToast('Admin approved your re-entry. Welcome back!', 'success');
+                      } else {
+                        showToast('Request is still pending admin review.', 'error');
+                      }
+                    } catch {
+                      showToast('Cannot connect to server.', 'error');
+                    }
+                  }}
+                >
+                  🔄 Check Unlock Status Now
+                </button>
               </div>
             ) : (
               <button
                 className="ba-neon-btn ba-btn-sm"
                 style={{ background: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.5)', color: '#fbbf24', width: '100%' }}
                 onClick={handleRequestReentry}
-                disabled={!activeCheatReportId}
+                disabled={reentryRequested || (!activeCheatReportId && !teamName && !registrationId)}
               >
                 🔔 Request Re-entry
               </button>

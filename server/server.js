@@ -453,7 +453,8 @@ app.post('/api/arena-login', async (req, res) => {
     if (!registrationId?.trim()) {
       return res.status(400).json({ error: 'Registration ID is required.' });
     }
-    const reg = await Registration.findOne({ registrationId: registrationId.trim().toUpperCase() });
+    const cleanRegId = registrationId.trim().toUpperCase();
+    const reg = await Registration.findOne({ registrationId: cleanRegId });
     if (!reg) {
       return res.status(404).json({ error: 'Registration ID not found. Check your ID and try again.' });
     }
@@ -464,12 +465,32 @@ app.post('/api/arena-login', async (req, res) => {
       return res.status(403).json({ status: 'pending', error: 'Your payment is still under review. Please wait for admin verification.' });
     }
     // verified
-    console.log(`🎮 Arena login: ${reg.registrationId} [${reg.teamType}] ${reg.members.map(m => m.name).join(' & ')}`);
+    const memberNames = reg.members.map(m => m.name).join(' & ');
+    console.log(`🎮 Arena login: ${reg.registrationId} [${reg.teamType}] ${memberNames}`);
+
+    // Check if team has an active proctoring lock
+    const cheat = await CheatReport.findOne({
+      $or: [
+        { registrationId: cleanRegId },
+        { teamName: memberNames }
+      ]
+    }).lean();
+
+    const isLocked = !!(cheat && cheat.locked && !cheat.reentryApproved && !cheat.adminUnlocked);
+
     res.json({
       success: true,
       registrationId: reg.registrationId,
       teamType: reg.teamType,
       members: reg.members.map(m => ({ name: m.name, email: m.email })),
+      isLocked,
+      cheatReport: cheat ? {
+        _id: cheat._id,
+        reportId: cheat._id,
+        reason: cheat.reason,
+        reentryRequested: cheat.reentryRequested === true,
+        reentryApproved: cheat.reentryApproved === true || cheat.adminUnlocked === true,
+      } : null,
     });
   } catch (err) {
     console.error('Arena login error:', err);
@@ -479,34 +500,51 @@ app.post('/api/arena-login', async (req, res) => {
 
 // ─── Proctoring / Cheat Report Routes ────────────────────────────────────────
 
-// POST /api/cheat-report — Upsert: one record per team (updates on repeat violations)
+// POST /api/cheat-report — Upsert: one record per team (ZERO TOLERANCE: locked immediately on first attempt)
 app.post('/api/cheat-report', cheatLimiter, async (req, res) => {
   try {
-    const { teamName, reason, warnCount, phase, timestamp, locked, registrationId } = req.body;
+    const { teamName, reason, warnCount, phase, timestamp, registrationId } = req.body;
     if (!teamName?.trim() || !reason?.trim()) {
       return res.status(400).json({ error: 'teamName and reason are required.' });
     }
-    // Upsert: findOneAndUpdate with upsert so there is only ONE doc per team
+    const cleanTeam = teamName.trim();
+    const cleanRegId = (registrationId || '').trim().toUpperCase();
+
+    // Check if team exists to preserve pending re-entry request if already locked
+    const existing = await CheatReport.findOne({
+      $or: [
+        { teamName: cleanTeam },
+        ...(cleanRegId ? [{ registrationId: cleanRegId }] : [])
+      ]
+    });
+
+    const keepReentryReq = existing?.locked && existing?.reentryRequested && !existing?.reentryApproved;
+
     const report = await CheatReport.findOneAndUpdate(
-      { teamName: teamName.trim() },
+      {
+        $or: [
+          { teamName: cleanTeam },
+          ...(cleanRegId ? [{ registrationId: cleanRegId }] : [{ teamName: cleanTeam }])
+        ]
+      },
       {
         $set: {
+          teamName:         cleanTeam,
           reason:           reason.trim(),
           warnCount:        warnCount || 1,
           phase:            phase || '',
           timestamp:        timestamp || Date.now(),
-          locked:           locked || false,
-          registrationId:   registrationId || '',
-          // Reset re-entry request when a new violation comes in
-          reentryRequested: false,
+          locked:           true, // Zero tolerance: locked immediately
+          registrationId:   cleanRegId || existing?.registrationId || '',
+          reentryRequested: keepReentryReq ? true : false,
           reentryApproved:  false,
           adminUnlocked:    false,
         },
       },
       { upsert: true, new: true }
     );
-    console.log(`🚨 [${locked ? 'LOCKED' : `WARN ${warnCount}/3`}] ${teamName}: ${reason}`);
-    res.status(201).json({ success: true, reportId: report._id });
+    console.log(`🚨 [ZERO-TOLERANCE LOCKED] ${cleanTeam} (${cleanRegId}): ${reason}`);
+    res.status(201).json({ success: true, reportId: report._id, _id: report._id });
   } catch (err) {
     console.error('Cheat report error:', err);
     res.status(500).json({ error: 'Server error.' });
@@ -523,56 +561,134 @@ app.get('/api/cheat-reports', async (req, res) => {
   }
 });
 
-// GET /api/cheat-reports/lock-status/:teamName — Participant polls to check if admin approved re-entry
-app.get('/api/cheat-reports/lock-status/:teamName', async (req, res) => {
+// GET /api/cheat-reports/lock-status/:identifier — Participant polls to check if admin approved re-entry
+app.get('/api/cheat-reports/lock-status/:identifier', async (req, res) => {
   try {
-    const report = await CheatReport.findOne({ teamName: req.params.teamName }).lean();
-    if (!report) {
-      // No record at all — team has no violations. Return noReport so frontend does NOT auto-unlock.
+    const rawParam = decodeURIComponent(req.params.identifier || '').trim();
+    if (!rawParam) {
       return res.json({ noReport: true, locked: false, reentryApproved: false, reentryRequested: false });
     }
+    const escaped = rawParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const report = await CheatReport.findOne({
+      $or: [
+        { teamName: { $regex: new RegExp(`^${escaped}$`, 'i') } },
+        { registrationId: rawParam.toUpperCase() },
+        { registrationId: rawParam }
+      ]
+    }).lean();
+
+    if (!report) {
+      // If no report found or admin dismissed it, the team is not locked
+      return res.json({ noReport: true, locked: false, reentryApproved: true, reentryRequested: false });
+    }
+
+    const isApproved = report.reentryApproved === true || report.adminUnlocked === true || report.locked === false;
+
     res.json({
+      _id:              report._id,
+      reportId:         report._id,
       locked:           report.locked,
-      reentryRequested: report.reentryRequested,
-      // Only unlock when admin EXPLICITLY approved — never just because locked===false
-      reentryApproved:  report.reentryApproved === true || report.adminUnlocked === true,
+      reentryRequested: report.reentryRequested === true,
+      reentryApproved:  isApproved,
       warnCount:        report.warnCount,
+      teamName:         report.teamName,
+      registrationId:   report.registrationId,
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error.' });
   }
 });
 
-// PATCH /api/cheat-reports/:id/request-reentry — Player requests re-entry after being locked
-app.patch('/api/cheat-reports/:id/request-reentry', async (req, res) => {
+// Helper for re-entry request logic
+const handleReentryRequest = async (payload, res) => {
   try {
-    const report = await CheatReport.findByIdAndUpdate(
-      req.params.id,
-      { reentryRequested: true, reentryApproved: false },
+    let query = null;
+    const reportId = payload.reportId || payload.id;
+    if (reportId && mongoose.isValidObjectId(reportId)) {
+      query = { _id: reportId };
+    } else if (payload.registrationId?.trim()) {
+      query = { registrationId: payload.registrationId.trim().toUpperCase() };
+    } else if (payload.teamName?.trim()) {
+      const escaped = payload.teamName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query = { teamName: { $regex: new RegExp(`^${escaped}$`, 'i') } };
+    }
+
+    if (!query) {
+      return res.status(400).json({ error: 'Report ID, teamName, or registrationId required.' });
+    }
+
+    const report = await CheatReport.findOneAndUpdate(
+      query,
+      { $set: { reentryRequested: true, reentryApproved: false } },
+      { new: true }
+    );
+    if (!report) return res.status(404).json({ error: 'Cheat report not found.' });
+    console.log(`🔔 Re-entry requested by team: ${report.teamName} [${report.registrationId}]`);
+    res.json({ success: true, reportId: report._id, report });
+  } catch (err) {
+    console.error('Request reentry error:', err);
+    res.status(500).json({ error: 'Server error.' });
+  }
+};
+
+// POST /api/cheat-reports/request-reentry — Flexible re-entry request
+app.post('/api/cheat-reports/request-reentry', (req, res) => {
+  handleReentryRequest(req.body, res);
+});
+
+// PATCH /api/cheat-reports/:id/request-reentry — Legacy endpoint
+app.patch('/api/cheat-reports/:id/request-reentry', (req, res) => {
+  handleReentryRequest({ id: req.params.id, ...req.body }, res);
+});
+
+// Helper for re-entry approval logic
+const handleReentryApproval = async (payload, res) => {
+  try {
+    let query = null;
+    const reportId = payload.reportId || payload.id;
+    if (reportId && mongoose.isValidObjectId(reportId)) {
+      query = { _id: reportId };
+    } else if (payload.registrationId?.trim()) {
+      query = { registrationId: payload.registrationId.trim().toUpperCase() };
+    } else if (payload.teamName?.trim()) {
+      const escaped = payload.teamName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query = { teamName: { $regex: new RegExp(`^${escaped}$`, 'i') } };
+    }
+
+    if (!query) {
+      return res.status(400).json({ error: 'Report ID, teamName, or registrationId required.' });
+    }
+
+    const report = await CheatReport.findOneAndUpdate(
+      query,
+      {
+        $set: {
+          reentryApproved:  true,
+          adminUnlocked:    true,
+          locked:           false,
+          reentryRequested: false,
+          warnCount:        0,
+        }
+      },
       { new: true }
     );
     if (!report) return res.status(404).json({ error: 'Report not found.' });
-    console.log(`🔔 Re-entry requested by team: ${report.teamName}`);
-    res.json({ success: true });
+    console.log(`✅ Re-entry approved for team: ${report.teamName} [${report.registrationId}]`);
+    res.json({ success: true, report });
   } catch (err) {
+    console.error('Approve reentry error:', err);
     res.status(500).json({ error: 'Server error.' });
   }
+};
+
+// POST /api/cheat-reports/approve-reentry — Admin approves re-entry
+app.post('/api/cheat-reports/approve-reentry', (req, res) => {
+  handleReentryApproval(req.body, res);
 });
 
 // PATCH /api/cheat-reports/:id/approve-reentry — Admin approves re-entry
-app.patch('/api/cheat-reports/:id/approve-reentry', async (req, res) => {
-  try {
-    const report = await CheatReport.findByIdAndUpdate(
-      req.params.id,
-      { reentryApproved: true, adminUnlocked: true, locked: false },
-      { new: true }
-    );
-    if (!report) return res.status(404).json({ error: 'Report not found.' });
-    console.log(`✅ Re-entry approved for team: ${report.teamName}`);
-    res.json({ success: true, report });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error.' });
-  }
+app.patch('/api/cheat-reports/:id/approve-reentry', (req, res) => {
+  handleReentryApproval({ id: req.params.id, ...req.body }, res);
 });
 
 // DELETE /api/cheat-reports/:id/dismiss — Admin: remove a report
@@ -586,19 +702,8 @@ app.delete('/api/cheat-reports/:id/dismiss', async (req, res) => {
 });
 
 // PATCH /api/cheat-reports/:id/unlock — legacy compat
-app.patch('/api/cheat-reports/:id/unlock', async (req, res) => {
-  try {
-    const report = await CheatReport.findByIdAndUpdate(
-      req.params.id,
-      { adminUnlocked: true, reentryApproved: true, locked: false },
-      { new: true }
-    );
-    if (!report) return res.status(404).json({ error: 'Report not found.' });
-    console.log(`🔓 Admin unlocked team: ${report.teamName}`);
-    res.json({ success: true, report });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error.' });
-  }
+app.patch('/api/cheat-reports/:id/unlock', (req, res) => {
+  handleReentryApproval({ id: req.params.id, ...req.body }, res);
 });
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
