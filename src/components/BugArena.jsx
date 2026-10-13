@@ -502,7 +502,6 @@ const BugArena = ({ onAbort }) => {
   const [reentryRequested, setReentryRequested] = useState(false);
   const [unlockGracePeriod, setUnlockGracePeriod] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenDismissed, setFullscreenDismissed] = useState(false);
   // Ref to hold the previous submission key when editing code after submit
   // (survives submittedKey being cleared to show the editor again)
   const pendingEditKeyRef = useRef(null);
@@ -602,7 +601,7 @@ const BugArena = ({ onAbort }) => {
       phase === 'create' && !submittedKey && !isSubmitting
     ) {
       showToast('Coding phase ended! Auto-submitting your code...', 'error');
-      handleSubmitCode();
+      handleSubmitCode(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalEventPhase]);
@@ -733,10 +732,10 @@ const BugArena = ({ onAbort }) => {
   useEffect(() => {
     const shouldBeFullscreen = isSetup && isRegistered && !isAdminLoggedIn &&
       (phase === 'create' || phase === 'hunt') && !isLocked;
-    if (shouldBeFullscreen && !isFullscreen && !fullscreenDismissed) {
+    if (shouldBeFullscreen && !isFullscreen) {
       document.documentElement.requestFullscreen?.().catch(() => {});
     }
-  }, [isSetup, isRegistered, phase, isAdminLoggedIn, isLocked, isFullscreen, fullscreenDismissed]);
+  }, [isSetup, isRegistered, phase, isAdminLoggedIn, isLocked, isFullscreen]);
 
   // Proctoring is ONLY active when user is in code-writing phases
   // (not during registration, setup, admin mode, or while locked / in unlock grace period)
@@ -1136,7 +1135,11 @@ const BugArena = ({ onAbort }) => {
   // ── Submit Code & Generate 6-Character Key ──
   // Uses a stable team-based slot key so re-submissions UPSERT the same entry
   // (admin panel always shows only the LATEST version)
-  const handleSubmitCode = async () => {
+  const handleSubmitCode = async (isAutoSubmit = false) => {
+    if (!isAutoSubmit && !isFullscreen) {
+      showToast('Fullscreen mode is mandatory to write or submit code!', 'error');
+      return;
+    }
     if (!code.trim()) {
       showToast('Write some code before submitting!', 'error');
       return;
@@ -1876,50 +1879,6 @@ const BugArena = ({ onAbort }) => {
         Click <strong>Submit Bug Code</strong> to generate your unique 6-letter encrypted key!
       </p>
 
-      {/* Fullscreen prompt banner */}
-      {!isFullscreen && !fullscreenDismissed && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(251,191,36,0.15) 0%, rgba(255,107,107,0.1) 100%)',
-          border: '2px solid rgba(251,191,36,0.5)',
-          borderRadius: '12px',
-          padding: '1rem 1.4rem',
-          marginBottom: '1.2rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '1rem',
-          flexWrap: 'wrap',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-            <span style={{ fontSize: '1.4rem' }}>⛶</span>
-            <div>
-              <div style={{ color: '#fbbf24', fontWeight: 800, fontSize: '0.9rem', fontFamily: 'Space Grotesk, sans-serif' }}>
-                Fullscreen Required for Proctoring
-              </div>
-              <div style={{ color: '#a0a0c5', fontSize: '0.78rem', marginTop: '0.15rem' }}>
-                Exiting fullscreen during the coding phase will be flagged as a proctoring violation.
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '0.6rem', flexShrink: 0 }}>
-            <button
-              className="ba-neon-btn ba-btn-sm"
-              style={{ background: 'rgba(251,191,36,0.2)', borderColor: 'rgba(251,191,36,0.6)', color: '#fbbf24' }}
-              onClick={() => document.documentElement.requestFullscreen?.().catch(() => {})}
-            >
-              ⛶ Enter Fullscreen
-            </button>
-            <button
-              className="ba-neon-btn ba-btn-sm"
-              style={{ background: 'rgba(107,107,138,0.1)', borderColor: 'rgba(107,107,138,0.3)', color: '#6b6b8a', fontSize: '0.7rem' }}
-              onClick={() => setFullscreenDismissed(true)}
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-
       {submittedKey ? (
         <div className="ba-submitted-card ba-fade-in">
           <div className="ba-submitted-body">
@@ -1966,6 +1925,54 @@ const BugArena = ({ onAbort }) => {
               </button>
             </div>
           </div>
+        </div>
+      ) : !isFullscreen ? (
+        /* Fullscreen Hard Lock: The entire writing & submission workspace is locked */
+        <div className="ba-fade-in" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '380px',
+          gap: '1.4rem',
+          background: 'radial-gradient(ellipse at center, rgba(251,191,36,0.08) 0%, rgba(10,12,24,0.7) 100%)',
+          border: '2px dashed rgba(251,191,36,0.4)',
+          borderRadius: '16px',
+          padding: '3.5rem 2rem',
+          margin: '1.5rem 0',
+          textAlign: 'center',
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            background: 'rgba(251,191,36,0.12)',
+            border: '2px solid rgba(251,191,36,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '2.4rem',
+            boxShadow: '0 0 25px rgba(251,191,36,0.25)',
+          }}>
+            🔒
+          </div>
+          <div>
+            <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800, color: '#fbbf24', fontSize: '1.35rem', letterSpacing: '0.5px' }}>
+              FULLSCREEN REQUIRED TO WRITE CODE
+            </div>
+            <p style={{ color: '#a0a0c5', fontSize: '0.92rem', maxWidth: '480px', margin: '0.6rem auto 0', lineHeight: 1.6 }}>
+              Writing, editing, and submitting buggy code is locked until you enter Fullscreen mode.
+              This prevents cheating, tab-switching, and unauthorized assistance during the event.
+            </p>
+          </div>
+          <button
+            className="ba-neon-btn ba-btn-yellow"
+            style={{ fontSize: '1rem', padding: '0.85rem 2rem', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}
+            onClick={() => document.documentElement.requestFullscreen?.().catch(() => {})}
+          >
+            <span style={{ fontSize: '1.2rem' }}>⛶</span>
+            <span>Enter Fullscreen Mode to Unlock</span>
+          </button>
         </div>
       ) : (
         <>
@@ -2045,10 +2052,11 @@ const BugArena = ({ onAbort }) => {
             <button
               className="ba-neon-btn ba-btn-yellow"
               onClick={handleSubmitCode}
-              disabled={!code.trim() || createdBugs.filter(b => b.description.trim()).length === 0 || isSubmitting}
+              disabled={!code.trim() || createdBugs.filter(b => b.description.trim()).length === 0 || isSubmitting || !isFullscreen}
+              title={!isFullscreen ? 'Enter fullscreen to submit your code' : ''}
             >
               <span className="ba-btn-icon">⚡</span>
-              {isSubmitting ? 'Submitting & Encrypting...' : 'Submit Bug Code'}
+              {isSubmitting ? 'Submitting & Encrypting...' : !isFullscreen ? '🔒 Fullscreen Required to Submit' : 'Submit Bug Code'}
             </button>
             <button
               className="ba-neon-btn ba-btn-cyan"
