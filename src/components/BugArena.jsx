@@ -508,6 +508,35 @@ const BugArena = ({ onAbort }) => {
 
   // Restore session from sessionStorage on initial load
   useEffect(() => {
+    // 1. Check for pending reload lock from previous unload/reload attempt
+    try {
+      const reloadLock = localStorage.getItem('bugarena_reload_lock');
+      if (reloadLock) {
+        const parsed = JSON.parse(reloadLock);
+        localStorage.removeItem('bugarena_reload_lock');
+        setIsLocked(true);
+        setCheatWarnings(1);
+        setIsSetup(true);
+        if (parsed.teamName) setTeamName(parsed.teamName);
+        if (parsed.registrationId) setRegistrationId(parsed.registrationId);
+        fetch(`${SERVER_BASE}/api/cheat-report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teamName: parsed.teamName || 'Unknown Team',
+            registrationId: parsed.registrationId || '',
+            reason: parsed.reason || 'LOCKED — Page reload / Tab closed during active contest',
+            warnCount: 1,
+            phase: parsed.phase || 'create',
+            timestamp: Date.now(),
+            locked: true,
+          }),
+        }).catch(() => {});
+        showToast('Account is locked due to page reload during the competition.', 'error');
+      }
+    } catch {}
+
+    // 2. Restore session from sessionStorage
     try {
       const saved = sessionStorage.getItem('bugarena_session');
       if (saved) {
@@ -521,6 +550,23 @@ const BugArena = ({ onAbort }) => {
         if (parsed.activeCheatReportId) setActiveCheatReportId(parsed.activeCheatReportId);
         if (parsed.reentryRequested) setReentryRequested(parsed.reentryRequested);
         if (parsed.phase && parsed.phase !== 'admin') setPhase(parsed.phase);
+
+        // Verify with server if this session has an active lock
+        const idToCheck = parsed.registrationId || parsed.teamName;
+        if (idToCheck) {
+          fetch(`${SERVER_BASE}/api/cheat-reports/lock-status/${encodeURIComponent(idToCheck)}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.locked === true && data.reentryApproved !== true) {
+                setIsLocked(true);
+                setIsSetup(true);
+                setCheatWarnings(1);
+                if (data._id || data.reportId) setActiveCheatReportId(data._id || data.reportId);
+                if (data.reentryRequested) setReentryRequested(true);
+              }
+            })
+            .catch(() => {});
+        }
       }
     } catch { /* ignore */ }
   }, []);
@@ -737,6 +783,17 @@ const BugArena = ({ onAbort }) => {
     }
   }, [isSetup, isRegistered, phase, isAdminLoggedIn, isLocked, isFullscreen]);
 
+  // Register active contest session with server (so mid-contest reload/exit is tracked)
+  useEffect(() => {
+    if (isSetup && isRegistered && !isAdminLoggedIn && (phase === 'create' || phase === 'hunt') && registrationId) {
+      fetch(`${SERVER_BASE}/api/arena-session/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId, teamName, phase }),
+      }).catch(() => {});
+    }
+  }, [isSetup, isRegistered, isAdminLoggedIn, phase, registrationId, teamName]);
+
   // Proctoring is ONLY active when user is in code-writing phases
   // (not during registration, setup, admin mode, or while locked / in unlock grace period)
   const isProctoringActive =
@@ -802,6 +859,58 @@ const BugArena = ({ onAbort }) => {
       }
     };
 
+    const handleBeforeUnload = (e) => {
+      // 1. Browser native confirmation prompt
+      e.preventDefault();
+      e.returnValue = 'PROCTORING WARNING: Reloading or leaving the contest window will LOCK your account!';
+
+      // 2. Persist reload lock locally
+      try {
+        localStorage.setItem('bugarena_reload_lock', JSON.stringify({
+          teamName: teamName || 'Unknown Team',
+          registrationId: registrationId || '',
+          reason: 'LOCKED — Page reload / Tab closed during active contest',
+          phase,
+          timestamp: Date.now(),
+        }));
+      } catch {}
+
+      // 3. Send immediate beacon to server
+      try {
+        const payload = JSON.stringify({
+          teamName: teamName || 'Unknown Team',
+          registrationId: registrationId || '',
+          reason: 'LOCKED — Page reload / Tab closed during active contest',
+          warnCount: 1,
+          phase,
+          timestamp: Date.now(),
+          locked: true,
+        });
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon(`${SERVER_BASE}/api/cheat-report`, blob);
+      } catch (err) {
+        console.warn('Beacon send failed:', err);
+      }
+
+      return e.returnValue;
+    };
+
+    const handlePageHide = () => {
+      try {
+        const payload = JSON.stringify({
+          teamName: teamName || 'Unknown Team',
+          registrationId: registrationId || '',
+          reason: 'LOCKED — Page reload / Tab closed during active contest',
+          warnCount: 1,
+          phase,
+          timestamp: Date.now(),
+          locked: true,
+        });
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon(`${SERVER_BASE}/api/cheat-report`, blob);
+      } catch {}
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
@@ -809,6 +918,8 @@ const BugArena = ({ onAbort }) => {
     document.addEventListener('paste', handleCopyPaste);
     document.addEventListener('cut', handleCopyPaste);
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -818,10 +929,12 @@ const BugArena = ({ onAbort }) => {
       document.removeEventListener('paste', handleCopyPaste);
       document.removeEventListener('cut', handleCopyPaste);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       if (blurTimer) clearTimeout(blurTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProctoringActive, phase, teamName]);
+  }, [isProctoringActive, phase, teamName, registrationId]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -1198,6 +1311,14 @@ const BugArena = ({ onAbort }) => {
       console.warn('Cloud registry sync error:', err);
     }
 
+    if (registrationId) {
+      fetch(`${SERVER_BASE}/api/arena-session/finish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId }),
+      }).catch(() => {});
+    }
+
     setSubmittedKey(key);
     setIsSubmitting(false);
     if (isResubmit) {
@@ -1457,6 +1578,7 @@ const BugArena = ({ onAbort }) => {
         setTeamName(memberNames);
         if (data.isLocked) {
           setIsLocked(true);
+          setIsSetup(true); // Ensures the full-screen locked proctoring modal takes control immediately
           setCheatWarnings(1);
           if (data.cheatReport?._id) setActiveCheatReportId(data.cheatReport._id);
           if (data.cheatReport?.reentryRequested) setReentryRequested(true);

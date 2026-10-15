@@ -7,7 +7,30 @@ import nexusLogo from './assets/nexus-logo.svg';
 
 function App() {
   const scrollContainerRef = useRef(null);
-  const [redirectTarget, setRedirectTarget] = useState(null);
+  const [redirectTarget, setRedirectTargetState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('active_redirect_target');
+      if (saved) return saved;
+      if (window.location.hash) {
+        const hash = window.location.hash.replace('#', '');
+        if (['bugarena', 'events', 'hackathons', 'puzzles', 'learning', 'family'].includes(hash)) {
+          return hash;
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  const setRedirectTarget = (target) => {
+    setRedirectTargetState(target);
+    try {
+      if (target) {
+        sessionStorage.setItem('active_redirect_target', target);
+      } else {
+        sessionStorage.removeItem('active_redirect_target');
+      }
+    } catch {}
+  };
 
   const scrollToSection = (id) => {
     const element = document.getElementById(id);

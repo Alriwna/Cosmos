@@ -150,9 +150,13 @@ const RegistrationSchema = new mongoose.Schema({
     enum: ['pending', 'verified', 'rejected'],
     default: 'pending',
   },
-  adminNote:   { type: String, default: '' },
-  submittedAt: { type: Date, default: Date.now },
-  verifiedAt:  { type: Date },
+  adminNote:            { type: String, default: '' },
+  submittedAt:          { type: Date, default: Date.now },
+  verifiedAt:           { type: Date },
+  inContest:            { type: Boolean, default: false },
+  contestStartedAt:     { type: Date },
+  lastContestPhase:     { type: String, default: '' },
+  hasSubmittedCode:     { type: Boolean, default: false },
 }, { timestamps: true });
 const Registration = mongoose.model('Registration', RegistrationSchema);
 
@@ -469,12 +473,42 @@ app.post('/api/arena-login', async (req, res) => {
     console.log(`🎮 Arena login: ${reg.registrationId} [${reg.teamType}] ${memberNames}`);
 
     // Check if team has an active proctoring lock
-    const cheat = await CheatReport.findOne({
+    let cheat = await CheatReport.findOne({
       $or: [
         { registrationId: cleanRegId },
-        { teamName: memberNames }
+        { teamName: memberNames },
+        { teamName: reg.registrationId }
       ]
-    }).lean();
+    });
+
+    // If the team previously entered an active contest session without completing/submitting code,
+    // and is now re-logging in mid-contest: lock them for unauthorized exit/reload!
+    if (reg.inContest && !reg.hasSubmittedCode && (!cheat || (!cheat.reentryApproved && !cheat.adminUnlocked))) {
+      cheat = await CheatReport.findOneAndUpdate(
+        {
+          $or: [
+            { registrationId: cleanRegId },
+            { teamName: memberNames }
+          ]
+        },
+        {
+          $set: {
+            teamName: memberNames,
+            registrationId: cleanRegId,
+            reason: 'LOCKED — Re-entered arena after unauthorized exit / reload during active contest',
+            warnCount: 1,
+            phase: reg.lastContestPhase || 'create',
+            timestamp: Date.now(),
+            locked: true,
+            reentryRequested: false,
+            reentryApproved: false,
+            adminUnlocked: false,
+          }
+        },
+        { upsert: true, new: true }
+      );
+      console.log(`🚨 [CONTEST RELOAD DETECTED] ${memberNames} (${cleanRegId}) was locked upon re-entry!`);
+    }
 
     const isLocked = !!(cheat && cheat.locked && !cheat.reentryApproved && !cheat.adminUnlocked);
 
@@ -494,6 +528,51 @@ app.post('/api/arena-login', async (req, res) => {
     });
   } catch (err) {
     console.error('Arena login error:', err);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// POST /api/arena-session/start — Record that a participant has entered the live coding/hunting contest
+app.post('/api/arena-session/start', async (req, res) => {
+  try {
+    const { registrationId, teamName, phase } = req.body;
+    const cleanRegId = (registrationId || '').trim().toUpperCase();
+    if (cleanRegId) {
+      await Registration.findOneAndUpdate(
+        { registrationId: cleanRegId },
+        {
+          $set: {
+            inContest: true,
+            contestStartedAt: new Date(),
+            lastContestPhase: phase || 'create',
+          }
+        }
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// POST /api/arena-session/finish — Record legitimate code submission
+app.post('/api/arena-session/finish', async (req, res) => {
+  try {
+    const { registrationId } = req.body;
+    const cleanRegId = (registrationId || '').trim().toUpperCase();
+    if (cleanRegId) {
+      await Registration.findOneAndUpdate(
+        { registrationId: cleanRegId },
+        {
+          $set: {
+            inContest: false,
+            hasSubmittedCode: true,
+          }
+        }
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: 'Server error.' });
   }
 });
@@ -673,6 +752,12 @@ const handleReentryApproval = async (payload, res) => {
       { new: true }
     );
     if (!report) return res.status(404).json({ error: 'Report not found.' });
+    if (report.registrationId) {
+      await Registration.findOneAndUpdate(
+        { registrationId: report.registrationId.toUpperCase() },
+        { $set: { inContest: true, hasSubmittedCode: false } }
+      );
+    }
     console.log(`✅ Re-entry approved for team: ${report.teamName} [${report.registrationId}]`);
     res.json({ success: true, report });
   } catch (err) {
